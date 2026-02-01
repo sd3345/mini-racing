@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mini Racing — fixes</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#111;color:#fff;font-family:Arial,Helvetica,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh}
+.screen{width:340px;background:#222;padding:14px;border-radius:10px;display:none}
+.screen.active{display:block}
+input,button{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:none}
+button{background:#00ff88;color:#000;font-weight:700;cursor:pointer}
+.red{background:#ff4444;color:#fff}
+#game{width:300px;height:520px;background:#444;position:relative;overflow:hidden;margin:0 auto}
+.hud{position:absolute;left:8px;top:8px;z-index:70;font-size:14px}
+.line{position:absolute;left:50%;width:10px;height:40px;background:#fff;transform:translateX(-50%);z-index:1}
+.car{position:absolute;width:50px;height:90px;border-radius:12px;z-index:50;overflow:visible}
+.car .body{width:100%;height:100%;border-radius:12px}
+.car .window{position:absolute;top:18px;left:8px;width:34px;height:22px;background:#9ad;border-radius:8px}
+.car .wheel{position:absolute;width:8px;height:18px;background:#000;border-radius:4px}
+.wl{left:-6px;top:20px}.wr{right:-6px;top:20px}.wl2{left:-6px;bottom:20px}.wr2{right:-6px;bottom:20px}
+.car .light{position:absolute;top:5px;width:8px;height:6px;background:yellow;border-radius:50%}
+.l{left:8px}.r{right:8px}
+#player{bottom:18px;left:125px;}
+#mobile{position:absolute;bottom:8px;width:100%;display:flex;justify-content:space-between;z-index:80}
+.mob{width:46%;height:60px;font-size:22px;background:rgba(0,0,0,0.45);color:#fff;border-radius:8px}
+.shop-item{display:flex;gap:8px;align-items:center;margin:8px 0}
+.preview{width:48px;height:40px;border-radius:6px;border:2px solid #fff}
+.small{font-size:13px;color:#ddd}
+#colorPanel{display:none;padding:8px;background:#111;border-radius:8px;margin-top:8px}
+.colorBtn{width:40px;height:28px;border-radius:6px;border:2px solid #fff;display:inline-block;margin:4px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<div id="auth" class="screen active">
+  <h2>🏎 MINI RACING</h2>
+  <input id="nick" placeholder="Ник" />
+  <input id="pass" type="password" placeholder="Пароль" />
+  <button id="btnRegister">Регистрация</button>
+  <button id="btnLogin">Войти</button>
+</div>
+
+<div id="menu" class="screen">
+  <h3 id="hello">Привет</h3>
+  <div class="small" style="text-align:left">Рекорд: <span id="record">0</span> — Деньги: <span id="menuMoney">0</span></div>
+  <button id="btnPlay">▶ Играть</button>
+  <button id="btnShop">🛒 Магазин</button>
+  <button id="btnSettings">⚙ Настройки</button>
+</div>
+
+<div id="shop" class="screen">
+  <h3>🛒 Магазин машин</h3>
+  <div id="carsList"></div>
+  <div id="colorPanel">
+    <div class="small">Выбери цвет:</div>
+    <div id="colorButtons"></div>
+    <button id="colorClose">Закрыть</button>
+  </div>
+  <button id="btnBackFromShop">Назад</button>
+</div>
+
+<div id="settings" class="screen">
+  <h3>⚙ Настройки</h3>
+  <button id="btnLogout" class="red">LOG OUT</button>
+  <button id="btnBackFromSettings">Назад</button>
+</div>
+
+<div id="game" class="screen">
+  <div class="hud">
+    💰 <span id="money">0</span><br>
+    🏆 <span id="score">0</span>
+  </div>
+  <div id="mobile" style="display:none">
+    <button class="mob" id="mLeft">◀</button>
+    <button class="mob" id="mRight">▶</button>
+  </div>
+</div>
+
+<script>
+const carCatalog=[{id:0,name:"Starter",color:"#ff3b3b",price:0},{id:1,name:"Sport",color:"#2b6bff",price:100},{id:2,name:"Turbo",color:"#27c93f",price:200},{id:3,name:"Hyper",color:"#b44cff",price:300}];
+const colorOptions=[{name:"Красный",hex:"#ff3b3b"},{name:"Синий",hex:"#2b6bff"},{name:"Зелёный",hex:"#27c93f"},{name:"Коричневый",hex:"#8b4513"},{name:"Фиолетовый",hex:"#b44cff"},{name:"Розовый",hex:"#ff69b4"}];
+const lanes=[10,70,130,190,250];
+const userKey="mr_user_v1";
+const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+let user=null,playing=false,left=false,right=false,enemies=[],lines=[],score=0,speed=4;
+
+const $auth=document.getElementById("auth"),$menu=document.getElementById("menu"),$shop=document.getElementById("shop"),$settings=document.getElementById("settings"),$game=document.getElementById("game");
+const $nick=document.getElementById("nick"),$pass=document.getElementById("pass"),$hello=document.getElementById("hello"),$record=document.getElementById("record"),$menuMoney=document.getElementById("menuMoney"),$money=document.getElementById("money"),$score=document.getElementById("score"),$carsList=document.getElementById("carsList"),$mobile=document.getElementById("mobile"),$mLeft=document.getElementById("mLeft"),$mRight=document.getElementById("mRight"),$colorPanel=document.getElementById("colorPanel"),$colorButtons=document.getElementById("colorButtons"),$colorClose=document.getElementById("colorClose");
+
+function saveUser(){localStorage.setItem(userKey,JSON.stringify(user));}
+function loadUser(){const s=localStorage.getItem(userKey);return s?JSON.parse(s):null;}
+function show(id){[$auth,$menu,$shop,$settings,$game].forEach(el=>el.classList.remove("active"));if(id==="auth")$auth.classList.add("active");if(id==="menu")$menu.classList.add("active");if(id==="shop")$shop.classList.add("active");if(id==="settings")$settings.classList.add("active");if(id==="game")$game.classList.add("active");}
+
+function registerHandler(){const nick=$nick.value.trim();const pass=$pass.value;if(!nick||!pass)return alert("Заполни ник и пароль");const existing=loadUser();if(existing&&existing.nick===nick)return alert("Пользователь с таким ником уже есть");user={nick,pass,money:0,record:0,owned:[0],car:0,colors:{}};saveUser();openMenu();}
+function loginHandler(){const nick=$nick.value.trim();const pass=$pass.value;const saved=loadUser();if(!saved||saved.nick!==nick||saved.pass!==pass)return alert("Неверный ник/пароль");user=saved;openMenu();}
+
+function openMenu(){$hello.textContent="Привет, "+user.nick;$record.textContent=user.record||0;$menuMoney.textContent=user.money||0;show("menu");}
+function openSettings(){show("settings");}
+function logoutHandler(){if(!confirm("ВЫ УВЕРЕНЫ? Прогресс будет удалён"))return;localStorage.removeItem(userKey);user=null;$nick.value="";$pass.value="";enemies.forEach(e=>e.remove());enemies=[];lines.forEach(l=>{if(l.parentNode)l.parentNode.removeChild(l);});lines=[];show("auth");}
+
+function openShop(){$carsList.innerHTML="";carCatalog.forEach(car=>{const row=document.createElement("div");row.className="shop-item";const prev=document.createElement("div");prev.className="preview";const previewColor=(user.colors&&user.colors[car.id])?user.colors[car.id]:car.color;prev.style.background=previewColor;const info=document.createElement("div");info.style.flex="1";info.innerHTML=`<div style="font-weight:700">${car.name}</div><div class="small">Цена: ${car.price}$</div>`;const btn=document.createElement("button");btn.style.width="auto";btn.style.padding="8px 12px";if(user.owned.includes(car.id)){btn.textContent="Выбрать цвет";btn.onclick=()=>showColorPanel(car.id);}else{btn.textContent="Купить";btn.onclick=()=>{if(user.money<car.price)return alert("Недостаточно денег");user.money-=car.price;user.owned.push(car.id);user.car=car.id;saveUser();applyCarToPlayer();$menuMoney.textContent=user.money;alert("Куплено: "+car.name);openShop();}};const wrap=document.createElement("div");wrap.style.display="flex";wrap.style.alignItems="center";wrap.style.gap="8px";wrap.appendChild(prev);wrap.appendChild(info);row.appendChild(wrap);row.appendChild(btn);$carsList.appendChild(row);});$colorPanel.style.display="none";show("shop");}
+
+let _colorTargetCarId=null;
+function showColorPanel(carId){_colorTargetCarId=carId;$colorButtons.innerHTML="";colorOptions.forEach(c=>{const b=document.createElement("div");b.className="colorBtn";b.style.background=c.hex;b.title=c.name;b.addEventListener("click",()=>{if(!user.colors)user.colors={};user.colors[carId]=c.hex;user.car=carId;saveUser();applyCarToPlayer();openShop();alert("Цвет выбран: "+c.name);});$colorButtons.appendChild(b);});$colorPanel.style.display="block";}
+$colorClose.addEventListener("click",()=>{$colorPanel.style.display="none";});
+
+const player=document.createElement("div");player.className="car";player.id="player";player.innerHTML=`<div class="body"></div><div class="window"></div><div class="light l"></div><div class="light r"></div><div class="wheel wl"></div><div class="wheel wr"></div><div class="wheel wl2"></div><div class="wheel wr2"></div>`;$game.appendChild(player);
+
+function buildLines(){lines.forEach(l=>l.remove());lines=[];for(let i=0;i<7;i++){const ln=document.createElement("div");ln.className="line";ln.style.top=(i*70)+"px";$game.appendChild(ln);lines.push(ln);}}buildLines();
+
+if(isMobile){$mobile.style.display="flex";$mLeft.addEventListener("touchstart",e=>{e.preventDefault();left=true});$mLeft.addEventListener("touchend",e=>{e.preventDefault();left=false});$mRight.addEventListener("touchstart",e=>{e.preventDefault();right=true});$mRight.addEventListener("touchend",e=>{e.preventDefault();right=false});}else{$mobile.style.display="none";$mLeft.addEventListener("mousedown",()=>left=true);$mLeft.addEventListener("mouseup",()=>left=false);$mRight.addEventListener("mousedown",()=>right=true);$mRight.addEventListener("mouseup",()=>right=false);}
+document.addEventListener("keydown",e=>{if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a")left=true;if(e.key==="ArrowRight"||e.key.toLowerCase()==="d")right=true;});
+document.addEventListener("keyup",e=>{if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a")left=false;if(e.key==="ArrowRight"||e.key.toLowerCase()==="d")right=false;});
+
+function applyCarToPlayer(){const catalogCar=carCatalog.find(c=>c.id===user.car)||carCatalog[0];const color=(user.colors&&user.colors[user.car])?user.colors[user.car]:catalogCar.color;player.querySelector(".body").style.background=color;}
+function pickSpawnLane(){const free=lanes.filter(lane=>!enemies.some(e=>e._lane===lane&&(parseInt(e.style.top)<120)));if(free.length===0)return null;return free[Math.floor(Math.random()*free.length)];}
+function spawnEnemy(){const lane=pickSpawnLane();if(lane===null)return;const e=document.createElement("div");e.className="car enemy";e.style.left=lane+"px";e.style.top="-140px";e._lane=lane;e.innerHTML=`<div class="body"></div><div class="window"></div><div class="light l"></div><div class="light r"></div><div class="wheel wl"></div><div class="wheel wr"></div><div class="wheel wl2"></div><div class="wheel wr2"></div>`;e.querySelector(".body").style.background="#2b6bff";$game.appendChild(e);enemies.push(e);}
+function startGame(){if(!user)return alert("Сначала войди/зарегистрируйся");enemies.forEach(e=>e.remove());enemies=[];buildLines();score=0;speed=4;left=right=false;player.style.left="125px";applyCarToPlayer();$money.textContent=user.money;$score.textContent=score;show("game");playing=true;requestAnimationFrame(loop);}
+function collides(a,b){const ax=a.offsetLeft,ay=a.offsetTop,aw=a.offsetWidth,ah=a.offsetHeight,bx=b.offsetLeft,by=b.offsetTop,bw=b.offsetWidth,bh=b.offsetHeight;return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;}
+function loop(){if(!playing)return;score++;$score.textContent=score;$money.textContent=user.money;let x=player.offsetLeft;if(left&&x>0)x-=6;if(right&&x<250)x+=6;player.style.left=x+"px";lines.forEach(ln=>{ln.style.top=ln.offsetTop+speed+"px";if(ln.offsetTop>580)ln.style.top="-40px";});if(Math.random()<0.03)spawnEnemy();for(let i=enemies.length-1;i>=0;i--){const e=enemies[i];e.style.top=parseFloat(e.style.top)+speed+"px";if(parseFloat(e.style.top)>560){e.remove();enemies.splice(i,1);user.money=(user.money||0)+10;saveUser();continue;}if(collides(player,e)){playing=false;if(score>(user.record||0)){user.record=score;saveUser();}setTimeout(()=>{alert("GAME OVER");openMenu();},60);return;}}requestAnimationFrame(loop);}
+
+document.getElementById("btnRegister").addEventListener("click",registerHandler);
+document.getElementById("btnLogin").addEventListener("click",loginHandler);
+document.getElementById("btnPlay").addEventListener("click",startGame);
+document.getElementById("btnShop").addEventListener("click",openShop);
+document.getElementById("btnSettings").addEventListener("click",openSettings);
+document.getElementById("btnBackFromShop").addEventListener("click",()=>show("menu"));
+document.getElementById("btnBackFromSettings").addEventListener("click",()=>show("menu"));
+document.getElementById("btnLogout").addEventListener("click",logoutHandler);
+
+(function init(){const saved=loadUser();if(saved){user=saved;openMenu();}else{show("auth");}})();
+</script>
+</body>
+</html>
